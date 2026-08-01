@@ -1,0 +1,82 @@
+services:
+  # --- The Bodyguard (Tailscale) ---
+  # Joins the tailnet as "romm" and serves the app at https://romm.<tailnet>.ts.net
+  # via `tailscale serve` (NOT funnel — no public exposure).
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: romm-tailscale
+    hostname: romm
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTH_KEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/ts-serve.json
+    volumes:
+      - tailscale_data:/var/lib/tailscale
+      - ./ts-serve.json:/config/ts-serve.json:ro
+    cap_add:
+      - net_admin
+      - net_raw
+    restart: unless-stopped
+
+  # --- The App (RomM) ---
+  # Shares the tailscale container's network namespace, so it is ONLY reachable
+  # over the tailnet (via tailscale serve -> 127.0.0.1:8080). No host ports are
+  # published, so nothing is exposed on 192.168.4.37's LAN interface either.
+  romm:
+    image: rommapp/romm:latest
+    container_name: romm
+    restart: unless-stopped
+    network_mode: service:tailscale
+    environment:
+      # DB connection — DB also lives in the same netns, so use 127.0.0.1
+      - DB_HOST=127.0.0.1
+      - DB_NAME=romm                          # matches MARIADB_DATABASE
+      - DB_USER=romm-user                     # matches MARIADB_USER
+      - DB_PASSWD=${ROMM_DB_PASSWORD}         # matches MARIADB_PASSWORD
+      # Required: JWT signing key. Generate with `openssl rand -hex 32`
+      - ROMM_AUTH_SECRET_KEY=${ROMM_AUTH_SECRET_KEY}
+      # Metadata providers (optional but recommended)
+      - SCREENSCRAPER_USER=${SCREENSCRAPER_USER:-}
+      - SCREENSCRAPER_PASSWORD=${SCREENSCRAPER_PASSWORD:-}
+      - RETROACHIEVEMENTS_API_KEY=${RETROACHIEVEMENTS_API_KEY:-}
+      - STEAMGRIDDB_API_KEY=${STEAMGRIDDB_API_KEY:-}
+      - HASHEOUS_API_ENABLED=true             # free, no key required
+    volumes:
+      - romm_resources:/romm/resources        # covers, screenshots, etc.
+      - romm_redis_data:/redis-data           # background task cache
+      - ${ROMM_LIBRARY_DIR:-/srv/romm/library}:/romm/library:rw  # your game library
+      - ${ROMM_ASSETS_DIR:-/srv/romm/assets}:/romm/assets:rw     # saves, states
+      - ${ROMM_CONFIG_DIR:-/srv/romm/config}:/romm/config:rw     # config.yml
+    depends_on:
+      romm-db:
+        condition: service_healthy
+        restart: true
+
+  # --- The Database (MariaDB) ---
+  # Also shares the tailscale netns; reached by romm via 127.0.0.1:3306.
+  romm-db:
+    image: mariadb:11
+    container_name: romm-db
+    restart: unless-stopped
+    network_mode: service:tailscale
+    environment:
+      - MARIADB_ROOT_PASSWORD=${ROMM_DB_ROOT_PASSWORD}
+      - MARIADB_DATABASE=romm
+      - MARIADB_USER=romm-user
+      - MARIADB_PASSWORD=${ROMM_DB_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      start_period: 30s
+      start_interval: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# --- Volume Declarations ---
+volumes:
+  tailscale_data:
+  mysql_data:
+  romm_resources:
+  romm_redis_data:
