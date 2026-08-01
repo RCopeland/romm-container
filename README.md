@@ -21,7 +21,7 @@ host ports on the LAN interface.
 
 | Path | Purpose |
 | --- | --- |
-| `/mnt/roms/roms` | Game library (`<platform>/` folders) — external HDD (NTFS, UUID `E8CA8FAACA8F739A`) |
+| `/mnt/roms` | Library root (external HDD, NTFS, UUID `E8CA8FAACA8F739A`) — platform folders live at `/mnt/roms/roms/<platform>/` (RomM Structure A) |
 | `/mnt/roms/assets` | Saves, states, uploads — same HDD |
 | `/home/rob/romm/config` | `config.yml` — local disk (always available) |
 
