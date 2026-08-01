@@ -17,6 +17,18 @@ host ports on the LAN interface.
 | App port (inside netns) | `8080` |
 | DB | MariaDB, same netns (`127.0.0.1:3306`) |
 
+## Storage layout (host)
+
+| Path | Purpose |
+| --- | --- |
+| `/mnt/roms/roms` | Game library (`<platform>/` folders) — external HDD (NTFS, UUID `E8CA8FAACA8F739A`) |
+| `/mnt/roms/assets` | Saves, states, uploads — same HDD |
+| `/home/rob/romm/config` | `config.yml` — local disk (always available) |
+
+Mount is in `/etc/fstab` (`ntfs3`, `uid=1000,gid=1000`, `nofail`), so the host boots fine
+if the drive is unplugged. If the drive is ever missing while the container restarts,
+the library/saves will appear empty — nothing is lost, just remount and rescan.
+
 ## Quickstart (on the host)
 
 1. Copy this directory to the host, e.g. `~/romm`.
