@@ -41,6 +41,7 @@ services:
       - RETROACHIEVEMENTS_API_KEY=${RETROACHIEVEMENTS_API_KEY:-}
       - STEAMGRIDDB_API_KEY=${STEAMGRIDDB_API_KEY:-}
       - HASHEOUS_API_ENABLED=true             # free, no key required
+      - HLTB_API_ENABLED=${HLTB_API_ENABLED:-false}  # HowLongToBeat completion times
     volumes:
       - romm_resources:/romm/resources        # covers, screenshots, etc.
       - romm_redis_data:/redis-data           # background task cache
