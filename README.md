@@ -71,3 +71,66 @@ the library/saves will appear empty — nothing is lost, just remount and rescan
 - Updating: `docker compose pull && docker compose up -d`.
 - Secrets in `.env` are consumed via compose variable substitution
   (`${VAR}`) — do not commit the real `.env`.
+
+## Secret scanning
+
+Secrets are scanned **before** they reach GitHub, not after. `.gitignore` only
+covers `.env`; the scanner catches a key that leaks some other way (pasted into
+the README, a new file, `ts-serve.json`).
+
+One-time setup per clone:
+
+```bash
+pip install pre-commit   # or: pipx install pre-commit
+pre-commit install
+```
+
+Run every hook against the whole tree at any time:
+
+```bash
+pre-commit run --all-files
+```
+
+Hooks are gitleaks ([`gitleaks.toml`](gitleaks.toml)) plus private-key and
+large-file guards. `gitleaks.toml` extends the built-in ruleset with a
+**Tailscale `tskey-…` rule** — gitleaks has no Tailscale rule by default, and a
+Tailscale auth key can join a node to your tailnet, so it's the most sensitive
+credential in this stack. The third-party API keys this stack uses
+(ScreenScraper, SteamGridDB, RetroAchievements) are covered by the stock rules.
+
+`git commit --no-verify` skips the hooks. CI is the backstop for that: the
+`secrets` job scans full history on every push and PR.
+
+## CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs two jobs:
+
+| Job | What it does |
+|-----|--------------|
+| `secrets` | gitleaks full-history scan (`fetch-depth: 0`) — backstop for `--no-verify` |
+| `validate` | `docker compose config`, `ts-serve.json` JSON validity, and a check that `.env.example` documents every variable `compose.yaml` references |
+
+It is read-only on purpose: there is no build, no deploy, and no
+`docker compose up`. The live deployment owns the ROM library and volumes.
+
+### Making the checks required for PRs
+
+After the workflow has run at least once, require both jobs in
+**Settings → Branches** (or **Rulesets**) for `main`: enable *Require status
+checks to pass before merging* and select `secrets` and `validate`.
+
+Two caveats: required checks only gate **pull requests** — pushing directly to
+`main` bypasses them, so add a rule blocking direct pushes if you want them
+enforced on your own work too. And GitHub only offers a check in the picker
+once it has run at least once.
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `compose.yaml` | tailscale sidecar + RomM + MariaDB |
+| `ts-serve.json` | `tailscale serve` config (tailnet-only) |
+| `.env` / `.env.example` | secrets/config (`.env` is git-ignored) |
+| `.pre-commit-config.yaml` | gitleaks + hygiene hooks |
+| `gitleaks.toml` | gitleaks rules (adds Tailscale keys) |
+| `.github/workflows/ci.yml` | `secrets` + `validate` CI |
